@@ -55,7 +55,7 @@ informer 包括以下几个部分：
 
 - delta fifo
   
-  是一个 fifo 队列，每个元素为某个 api 对象的一些列变更事件，包括：Add、Update、Sync、Delete 等。
+  是一个 fifo 队列，每个元素对应某个 api 对象的某一类变更事件，包括：Add、Update、Sync、Delete 等。
 
 - local store
   
@@ -63,6 +63,8 @@ informer 包括以下几个部分：
   distribute 给所有关心该对象变更的 controller.
 
   local store 就是此类对象的本地缓存，跟 etcd 中的对象保持最终一致性。
+
+  为什么要缓存 api 对象？为了加速 api 对象的获取提高性能，同时缓解 api-server 的压力。
 
 - event distribute
 
@@ -135,7 +137,7 @@ func (p *processorListener) pop() {
 			var ok bool
 			notification, ok = p.pendingNotifications.ReadOne()
 			if !ok { // Nothing to pop
-				nextCh = nil // Disable this select case
+				nextCh = nil // Disable this select case，注意这种写法。chan 置空，case 分支会被忽略。
 			}
 		case notificationToAdd, ok := <-p.addCh: // 从 addCh 读取事件存放到 buffer 中。
 			if !ok {
@@ -182,11 +184,18 @@ func (p *processorListener) run() {
 }
 ```
 
+为什么每个 processListener 要实现为生产者、消费者模型呢？
+
+主要是同一个 informer 可以有多个 listener，而不同的 listener 消费速度是不一样的。如果从 informer 收到一个事件，然后 同步调用
+所有的 listener(即使并发调用)，则其他 listener 会被最慢的 listener 拖慢处理速度。为了解耦不同 listener，那就每个 listener
+搞成一个 producer -> queue -> consumer 的模型。informer 接收到事件后，扔到每个 listener 的内部 queue 中，然后由各个 listener
+的 consumer 慢慢消费。
+
 ### 编程中队列的使用
 
 可以看到整个 controller 的架构中用到了 队列。我们来扩展下，什么场景下应该使用 controller 呢？
 
-- 提供性能
+- 多消费者消费速度解耦 
 
 当某个 api 内部要执行比较耗时的操作的时候，就可以考虑使用队列。我们只需要将要处理的任务发送到队列即可，然后在消费者中进行真正的业务逻辑。
 
@@ -209,4 +218,9 @@ func (p *processorListener) run() {
     因为涉及到加/解锁，代码复杂度高，不好迭代/维护。
 
 这种场景下，我们也可以考虑使用队列来处理并发的问题。各个场景都是队列的生产者，在生产的时候仍然需要加锁，但这很轻量，因为只需要执行一个生产操作即可。
-队列的消费逻辑就很简单，不需要考虑并发的问题。一来降低了代码复杂度，而来提高了程序整体的性能。
+队列的消费逻辑就很简单，不需要考虑并发的问题。一来降低了代码复杂度，而来提高了程序整体的性能。像旧版 kafka controller 的模型就是此模型，kafka
+controller 需要处理各种事件：定时任务的事件、zookeeper watch 事件、来自 cli 的事件等等。如果都同步执行，逻辑会很复杂，涉及很多锁来保证并发安全，
+但是通过生产者、消费者模型，整个架构就会简单。
+
+实际上，golang 中的 select 模型就可以理解为是一个多生产者、但消费者的模型，生产者就是多个 case 分支，但消费者就是各个 case 分支的处理逻辑
+(任意时刻只有一个 case 分支在跑)，这也是 golang 为什么适合编写中间件、底层组件的原因，select 模型很方便。

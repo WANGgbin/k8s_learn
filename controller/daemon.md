@@ -1,11 +1,11 @@
-daemon controller 保证了 node 上总是有对应的 pod 在运行。<br>
+daemon controller 保证了 node 上总是有对应的 pod 在运行。
 
 关于 daemon controller，我们重点关注两个问题：
 
 - daemon controller 创建的 pod 如何绑定到固定的 node
     
     daemon controller 发现某个 node 上没有对应的 pod 后，就会创建 pod 在该 node 上运行。可是，创建的 pod 完全有可能被调度到其他 node
-上，如何让 pod 只能运行在目标 node 上呢？<br>
+上，如何让 pod 只能运行在目标 node 上呢？
 
     这就是 nodeAffinity 的作用，通过在 pod 中设置 nodeAffinity。scheduler 在调度 pod 的时候，就只会将 pod 调度到满足 nodeAffinity
 的 node 上。
@@ -13,7 +13,7 @@ daemon controller 保证了 node 上总是有对应的 pod 在运行。<br>
 - 如何在 unscheduled node 上创建 daemon pod 呢？
     
     当节点为 unscheduled 的时候，表示不能在该 node 上调度 pod，可是我们就想在此 node 上创建 daemon pod 怎么办呢？比如 node 的网络插件
-就是通过 daemon pod 的方式部署的，但是在成功部署网络插件之前，node 是 unscheduled 的。<br>
+就是通过 daemon pod 的方式部署的，但是在成功部署网络插件之前，node 是 unscheduled 的
 
     通过 toleration 实现，node 可能会被打上各种各样的 taint(污点)，为了能够让 pod 调度到这些 node 上，pod 需要设置 toleration 字段，表示
 能够容忍这些 taint。
@@ -33,6 +33,7 @@ func CreatePodTemplate(template v1.PodTemplateSpec, generation *int64, hash stri
 	return newTemplate
 }
 ```
+
 ```go
 // 加入各种各样的 tolerations
 func AddOrUpdateDaemonPodTolerations(spec *v1.PodSpec) {

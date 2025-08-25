@@ -3,7 +3,7 @@
 ## api 格式
 
 api-server 中的 api 是以 group 的方式组织的。group 中的 api path 格式如下；
-`/:prefix/:group_name/:version/namespace/:namespace_name/:kind/:name/:subresource`。<br>
+`/:prefix/:group_name/:version/namespace/:namespace_name/:kind/:name/:subresource`。
 
 我们以 pod 为例，比如其对应的 namespace 为 system, name 为 example_pod，其对应的 path 的各参数如下：
 
@@ -23,10 +23,10 @@ api-server 中的 api 是以 group 的方式组织的。group 中的 api path �
 
 ## api 注册
 
-如果要在 api-server 中注册一个对象的 apis，应该如何做呢？<br>
+如果要在 api-server 中注册一个对象的 apis，应该如何做呢？
 
 api-server 自定义了一套注册系统，每个 api 对象只需要实现特定的接口，然后将 api 对象关联到某个 api-group，这样在 install api-group 的时候
-就可以根据 api 对象实现的接口，注册不同的方法。我们还是以 pod 为例，看看其 api-handler 注册的流程。<br>
+就可以根据 api 对象实现的接口，注册不同的方法。我们还是以 pod 为例，看看其 api-handler 注册的流程。
 
 ### api-group
 
@@ -284,47 +284,47 @@ func (a *APIInstaller) registerResourceHandlers(path string, storage rest.Storag
 
 # 高可用及负载均衡
 
-我们来看看 controller-plane 是如何实现高可用/负载均衡的。我们知道可以通过 deployment 的方式部署业务应用，这样即使某个 pod 挂了，controller 也会拉起<br>
-一个新的 pod，从而实现高可用。至于负载均衡，可以通过 service 方式实现，service 创建 iptables 规则，从而当 client 以 vip 方式访问业务应用的时候，<br>
-可以将流量均摊到后端 pod 上。<br>
+我们来看看 controller-plane 是如何实现高可用/负载均衡的。我们知道可以通过 deployment 的方式部署业务应用，这样即使某个 pod 挂了，controller 也会拉起
+一个新的 pod，从而实现高可用。至于负载均衡，可以通过 service 方式实现，service 创建 iptables 规则，从而当 client 以 vip 方式访问业务应用的时候，
+可以将流量均摊到后端 pod 上。
 
-但是对于 controller-plane master 节点来说，k8s 并没有实现其高可用以及负载均衡，我们需要借助 `keepalived + haproxy` 或者其他工具实现高可用/负载均衡功能。<br>
-关于如何使用 `keepalived + haproxy` 配置 controller-plane 高可用，可以参考：https://github.com/kubernetes/kubeadm/blob/main/docs/ha-considerations.md#bootstrap-the-cluster<br>
-我们这里重点描述下 `keepalived + haproxy` 的实现原理。<br>
+但是对于 controller-plane master 节点来说，k8s 并没有实现其高可用以及负载均衡，我们需要借助 `keepalived + haproxy` 或者其他工具实现高可用/负载均衡功能。
+关于如何使用 `keepalived + haproxy` 配置 controller-plane 高可用，可以参考：https://github.com/kubernetes/kubeadm/blob/main/docs/ha-considerations.md#bootstrap-the-cluster
+我们这里重点描述下 `keepalived + haproxy` 的实现原理。
 
 ## haproxy
 
-要实现负载均衡，我们需要有一个负载均衡器。haproxy 是一个四/七层负载均衡器。同时，haproxy 支持健康检查后端服务，当后端服务宕机的时候，能够及时修改<br>
-ipvs 信息，从而将后续的客户端流量发送到正常运行的后端服务上。<br>
+要实现负载均衡，我们需要有一个负载均衡器。haproxy 是一个四/七层负载均衡器。同时，haproxy 支持健康检查后端服务，当后端服务宕机的时候，能够及时修改
+ipvs 信息，从而将后续的客户端流量发送到正常运行的后端服务上。
 
-有了 haproxy 是不是就足够了，客户端流量打到 haproxy，haproxy 将流量分发到真正的后端服务，有问题的后端服务也能被及时监测到并摘除。看着好像没什么问题。<br>
+有了 haproxy 是不是就足够了，客户端流量打到 haproxy，haproxy 将流量分发到真正的后端服务，有问题的后端服务也能被及时监测到并摘除。看着好像没什么问题。
 可是**haproxy 所在的站点挂了，是不是整个控制面就不用了？**
 
 ## keepalived
 
-keepalived 就是用来实现 haproxy 的高可用的。我们可以部署多个节点，每个节点都部署 keepalived + haproxy。这几个节点对外暴露一个同一的 vip,<br>
-client 通过这个 vip 访问 keepalived 集群。keepalived 集群是有状态的，只有一个 master 节点，其他节点都是 backup 节点。任意时刻，只有 master<br>
-节点对外提供服务，当 master 节点挂了之后，backup 节点会选举一个新的 master 节点，该 master 节点会接管 vip，客户端的流量会达到这个新的 master 节点，<br>
-从而实现了高可用。<br>
+keepalived 就是用来实现 haproxy 的高可用的。我们可以部署多个节点，每个节点都部署 keepalived + haproxy。这几个节点对外暴露一个同一的 vip,
+client 通过这个 vip 访问 keepalived 集群。keepalived 集群是有状态的，只有一个 master 节点，其他节点都是 backup 节点。任意时刻，只有 master
+节点对外提供服务，当 master 节点挂了之后，backup 节点会选举一个新的 master 节点，该 master 节点会接管 vip，客户端的流量会打到这个新的 master 节点，
+从而实现了高可用。
 
-这里就有问题了，多个 keepalived 节点对外暴露一个同一个的 vip，其他节点还可以接管这个 vip，这怎么理解如何实现的呢？<br>
+这里就有问题了，多个 keepalived 节点对外暴露一个同一个的 vip，其他节点还可以接管这个 vip，这怎么理解如何实现的呢？
 
-这就是 `vrrp(virtual route redundant protocol)`即虚拟路由冗余协议。这个协议要解决的问题是路由器的高可用问题。想象一下，如果一个局域网就只有<br>
-一个路由器，如果这个路由器挂了，那岂不是上不了忘了？vrrp 解决该问题的思路是将若干个路由器组成一个路由器组，在客户端看来，这个路由器组就是一个虚拟的路由器<br>
-这个路由器组对外暴露一个 virtual ip 和 virtual mac 地址，任何时候只有一个路由器接管这两个地址。**这里的接管其实就是将虚拟ip 绑定到某个网卡上，接受<br>
-所有目标地址为虚拟 ip 的 arp 请求，接受所有目标地址为 virtual mac 的数据包。**<br>
+这就是 `vrrp(virtual route redundant protocol)`即虚拟路由冗余协议。这个协议要解决的问题是路由器的高可用问题。想象一下，如果一个局域网就只有
+一个路由器，如果这个路由器挂了，那岂不是上不了网了？vrrp 解决该问题的思路是将若干个路由器组成一个路由器组，在客户端看来，这个路由器组就是一个虚拟的路由器
+这个路由器组对外暴露一个 virtual ip 和 virtual mac 地址，任何时候只有一个路由器接管这两个地址。**这里的接管其实就是将虚拟ip 绑定到某个网卡上，接受
+所有目标地址为虚拟 ip 的 arp 请求，接受所有目标地址为 virtual mac 的数据包。**
 
-vrrp 中节点分两个角色：master 和 backup。只有 master 对外提供服务，master 会定时给所有的 backup 组播消息，注意在 vrrp 中，只有一种消息，就是<br>
-这个组播消息，当 backup 节点收到 master 的组播消息后，就知道 master 节点是正常工作的，当超过一定时间没有收到数据包后，就会更改自动状态为 master，<br>
-然后给其他 backup 节点发送组播消息，当接收到其他 backup 节点的响应后，就可以根据优先级回退到 backup 状态或者保持 master 状态。新 master 会将<br>
-vip 绑定到自己的网卡上，后续接管所有目的地是 vip 的流量。<br>
+vrrp 中节点分两个角色：master 和 backup。只有 master 对外提供服务，master 会定时给所有的 backup 组播消息，注意在 vrrp 中，只有一种消息，就是
+这个组播消息，当 backup 节点收到 master 的组播消息后，就知道 master 节点是正常工作的，当超过一定时间没有收到数据包后，就会更改自动状态为 master，
+然后给其他 backup 节点发送组播消息，当接收到其他 backup 节点的响应后，就可以根据优先级回退到 backup 状态或者保持 master 状态。新 master 会将
+vip 绑定到自己的网卡上，后续接管所有目的地是 vip 的流量。
 
-正式因为有了 vrrp，实现了 keepalived 集群的高可用，即使某个节点挂了，也可以将流量切到其他节点上，而这一步**对用户来说完全透明的。**<br>
+正式因为有了 vrrp，实现了 keepalived 集群的高可用，即使某个节点挂了，也可以将流量切到其他节点上，而这一步**对用户来说完全透明的。**
 
-当然 keepalived 也可以实现负载均衡，不过其**只能实现四层均衡，通过 ipvs 实现**，要实现一些高级的负载均衡策略，我们还是要借助 haproxy。因此，<br>
-`keepalived + haproxy`是一对在负载均衡场景下，经常使用到的组合。<br>
+当然 keepalived 也可以实现负载均衡，不过其**只能实现四层均衡，通过 ipvs 实现**，要实现一些高级的负载均衡策略，我们还是要借助 haproxy。因此，
+`keepalived + haproxy`是一对在负载均衡场景下，经常使用到的组合。
 
-同样 keepalived 也有监控检查的功能，在我们的例子中，可以用来监控 haproxy 是否正常运行，如果 haproxy 异常退出了，keepalived 也就停止给其他节点<br>
+同样 keepalived 也有监控检查的功能，在我们的例子中，可以用来监控 haproxy 是否正常运行，如果 haproxy 异常退出了，keepalived 也就停止给其他节点
 发送 vrrp 组播消息，这样其他节点就可以接管 vip。
 
 
@@ -463,5 +463,5 @@ master 节点中的组件比如：controller-manager、scheduler 直接通过 lo
 
 # api-server 如何访问 etcd
 
-api-server 也是通过 localhost 方式直接访问本节点上的 etcd 实例。因为到 api-server 的请求已经做了均衡，所以 api-server 直接访问本节点<br>
-上的 etcd 实例，流量也是均衡的。<br>
+api-server 也是通过 localhost 方式直接访问本节点上的 etcd 实例。因为到 api-server 的请求已经做了均衡，所以 api-server 直接访问本节点
+上的 etcd 实例，流量也是均衡的。

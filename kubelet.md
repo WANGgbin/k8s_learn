@@ -88,7 +88,7 @@ func ShouldContainerBeRestarted(container *v1.Container, pod *v1.Pod, podStatus 
 # 容器活性探测机制
 
 容器是否健康运行，我们不能依赖 CRI 返回的容器状态，而应该由容器本身定义是否健康运行的标准。在 pod 中，我们可以为每个容器定义 livenessProbe
-来监测容器的状态。<br>
+来监测容器的状态。
 
 容器 probe 的方式包括：
 
@@ -106,10 +106,10 @@ func ShouldContainerBeRestarted(container *v1.Container, pod *v1.Pod, podStatus 
     发送一个 grpc 请求。
 
 
-那么在 kubelet 中，是如何消费 liveness probe 的结果的呢？<br>
+那么在 kubelet 中，是如何消费 liveness probe 的结果的呢？
 
 在执行 SyncPod() 的时候，我们需要判断应该拉起哪些容器，删除哪些容器。一些容器状态虽然是 running，但是 liveness probe 检测结果不一定是成功的，
-对于这种 container，就应该 kill 掉。代码路径为：pkg/kubelet/kuberuntime/kuberuntime_manager.go:993<br>
+对于这种 container，就应该 kill 掉。代码路径为：pkg/kubelet/kuberuntime/kuberuntime_manager.go:993
 
 其实在 k8s 中，有各种各样的 probe，liveness probe 只是其中一种。
 
@@ -118,5 +118,33 @@ func ShouldContainerBeRestarted(container *v1.Container, pod *v1.Pod, podStatus 
 几个问题：
 - kubelet 如何跟 csi 通信的？
 
-dns 套接字。
+
+# plugin 机制
+
+k8s 为了扩展性考虑，会将一些某方面的能力抽象为插件。比如，对于 volume 的管理抽象为 CSI，将资源分配(GPU 等)能力抽象为 DRA(Dynamic Resource Allocation)。
+而 kubelet 会与这些插件交互，这里就涉及到几个问题：
+
+- 怎么知道当前节点有哪些插件
+- 怎么注册这些插件
+
+## 插件发现机制
+
+为了能够让 kubelet 发现这些插件，kubelet 规定这些插件需要将自己的 uds(kubelet 与 插件通过 uds 通信)，注册到特定的目录下。
+
+然后 kubelet 会通过 inotify 系统调用监听该目录的变更，当有新的 uds 创建的时候(通过 path 的 stat 即可判断是不是 uds)，便知道有新的插件注册,
+随后与该 uds 建立连接，之后进行 grpc 通信。
+
+接下来的问题是，kubelet 怎么知道这个新 plugin 的类型、名字等信息呢？这就要求 plugin 需要实现一个 `GetInfo` 的接口，该接口返回 GetInfo
+的相关信息，据此 kubelet 能够知道插件的类型，kubelet 为不同类型的插件实现了不同的 Validate、Register、DeRegister 逻辑。
+
+## 调谐
+
+插件管理也涉及到一个调谐机制，我们要达到的目标就是实际注册的插件要与指定目录下的插件信息一致。
+
+
+# csi
+
+csi 插件是通过 daemonset 的方式部署在每一个节点上的。通过前面介绍的 plugin 机制，当 csi 插件启动后，kubelet 就能发现并建立 uds 连接。
+
+当 kubelet 接收到一个 pod 时，便会调用 csi 的能力，进行 mount 操作。
 

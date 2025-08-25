@@ -75,7 +75,7 @@ type NodeInfo struct {
 ```
 
 信息 cache 化也是提高调度性能的方法之一。这样相关的信息无须通过网络获取，直接从本地获取即可。既然使用了 cache，一个要考虑的问题就是 cache 信息
-与 etcd 中信息的一致性。实际上，通过 informer 即可实现最终一致性。<br>
+与 etcd 中信息的一致性。实际上，通过 informer 即可实现最终一致性。
 
 既然 informer 已经 cache 了对应的 api 对象，为什么还要单独搞一个 cache 呢？主要是因为 informer cache 的 api 对象无法直接用于调度，比如我们想知道
 某个 node 上已经有哪些 pod 了，这个信息是无法从 informer 获取的。因此单独搞了一个 scheduler 专用的 cache。
@@ -151,11 +151,11 @@ type PriorityQueue struct {
 
 ## clusterEvent
 
-怎么理解 clusterEvent 呢？我们直到一个 pod 能否成功调度依赖各种各样的条件，比如如果待调度 pod 设置了 nodeAffinity 属性 或者 antiNodeAffinity 属性，
-那么当新增一个 node 的时候，该 pod 就可能变得可调度，又或者 pod 可能跟其他 pod 有 affinity 关系，这样当一个 pod 成功调度后，当前 pod 也可能变得可调度。<br>
+怎么理解 clusterEvent 呢？我们知道一个 pod 能否成功调度依赖各种各样的条件，比如如果待调度 pod 设置了 nodeAffinity 属性 或者 antiNodeAffinity 属性，
+那么当新增一个 node 的时候，该 pod 就可能变得可调度，又或者 pod 可能跟其他 pod 有 affinity 关系，这样当一个 pod 成功调度后，当前 pod 也可能变得可调度。
 
 scheduler 将这些事件抽象为 clusterEvent，每个 plugin 都可以给自己关心的 clusterEvent 设置 hintFunc，这样当某个 event 发生的时候，就可以调用 pod.UnschedulablePlugins
-注册的 hintFunc 来决定将 pod 添加到 activeQ 中还是 backoffQ 中，又或者继续待在 unschedulablePods 容器中。<br>
+注册的 hintFunc 来决定将 pod 添加到 activeQ 中还是 backoffQ 中，又或者继续待在 unschedulablePods 容器中。
 
 我们看看这个决定 pod 走向的函数：
 ```go
@@ -260,7 +260,7 @@ func (p *PriorityQueue) isPodWorthRequeuing(logger klog.Logger, pInfo *framework
 
 # 调度流程
 
-这一部分是整个 scheduler 最核心的部分，我们看看具体的调度流程是啥样的。<br>
+这一部分是整个 scheduler 最核心的部分，我们看看具体的调度流程是啥样的。
 
 scheduler 的调度协程会不断的从 activeQ 中获取 pod 进行调度，如果 activeQ 中无可调度的 pod 的时候，调度协程就会阻塞在一个条件变量上，当有可调度
 的 pod 的时候，其他协程通过此条件变量激活调度线程。调度每个 pod 的逻辑如下：
@@ -326,13 +326,13 @@ func (sched *Scheduler) schedulePod(ctx context.Context, fwk framework.Framework
 - 为什么要生成快照
 
   如果调度过程中直接访问 cache，因为还会有 cache 的更新操作，这就导致需要加锁，从而导致调度的效率较慢。而通过快照的方式，调度逻辑只需要从快照
-获取信息即可，无须从 cache 获取信息，从而避免了调度逻辑的加锁，让调度更快。<br>
+获取信息即可，无须从 cache 获取信息，从而避免了调度逻辑的加锁，让调度更快。
 
   其实很多场景我们都可以看到这种通过快照的方式解耦读写的问题。比如 mysql 的 mvcc 就是通过快照的方式解耦读写，从而提高读写并发度。
 
 - 如何生成快照
 
-  要更新快照，有两种方式。一种就是每次都基于 cache 信息重建快照信息，另一种就是每次将 cache 中自上一次快照依赖的更新信息应用到快照信息。<br>
+  要更新快照，有两种方式。一种就是每次都基于 cache 信息重建快照信息，另一种就是每次将 cache 中自上一次快照依赖的更新信息应用到快照信息。
 
   显然第一种方式性能比较差，scheduler 使用了第二种方式。要使用第二种方式就需要一个逻辑时钟用来判断新/旧。scheduler 给 cache 中的每个 node
 和快照引入了一个 generation 的概念，每当 node 有更新的时候，就会将 node 信息置于 cache node 链表的头部，同时 node.generation += 1。当
@@ -341,7 +341,7 @@ func (sched *Scheduler) schedulePod(ctx context.Context, fwk framework.Framework
 
 - 调度期间集群发生的事件如何处理
 
-  使用了快照后，整个调度过程看到的是一个静态的信息，在调度期间可能发生一些影像调度结果的集群事件。scheduler 又是如何处理这些事件的呢？<br>
+  使用了快照后，整个调度过程看到的是一个静态的信息，在调度期间可能发生一些影像调度结果的集群事件。scheduler 又是如何处理这些事件的呢？
 
   这实际上就是前面讨论过的 inFlightEvents 的作用，将调度某个 pod 期间所有的集群事件都存放到一个单链表中，当基于快照信息不可调度的时候，会重放
 这些事件，如果这些事件会影响调度的结果，就将 pod 重新入队到 backoffQ 或者 activeQ 中。
@@ -361,7 +361,7 @@ func (sched *Scheduler) schedulePod(ctx context.Context, fwk framework.Framework
 - 并发 & 无锁
 
   无论是 predicate 阶段还是 priority 阶段，scheduler 都会搞好几个协程并发的执行，从而提高调度性能。此外，还通过无锁的方式进一步提高调度的
-性能。<br>
+性能。
 
   关于无锁部分，我们来看看 score 阶段，是怎么实现协程之间的无锁化的:
 
@@ -413,7 +413,7 @@ func (f *frameworkImpl) RunScorePlugins(ctx context.Context, state *framework.Cy
 ## framework
 
 为了能够让用户自定义调度逻辑，整个 framework 是基于 plugin 构建的。类似于操作系统内核的 netfilter，用户可以在协议栈的特定 point 定义 hook，
-framework 也在各个 point 定义了 plugin，用户只需要实现特定的 plugin 即可自定义调度逻辑。<br>
+framework 也在各个 point 定义了 plugin，用户只需要实现特定的 plugin 即可自定义调度逻辑。
 
 在 k8s 中，每个 pod 可以指定不同的调度 framework，即系统中可以同时生效多个 framework。framework 定义如下：
 
@@ -446,17 +446,17 @@ framework 中不同 point 的 plugin 是不尽相同的，包括 preFilter、fil
 - 注册
 
   一般我们都是在系统启动的时候注册 plugin。之所以注册 plugin，是因为我们需要知道系统中都有哪些生效的 plugin，进而可以通过用户配置
-获取对应的 plugin。<br>
+获取对应的 plugin。
 
   但是，在启动的时候，初始化 plugin 的一些必要的信息我们可能是无法获取到的，只有在运行的时候才可以确定 这些信息，进而才能初始化 plugin。
-那我们应该如何注册这些 plugin 呢？<br>
+那我们应该如何注册这些 plugin 呢？
 
   scheduler 的解决办法就是启动的时候不注册 plugin，而是注册 plugin 对应的 new func，然后在运行过程中调用 new func 生成对应的 plugin。
-具体可以参考下面 framework 初始化源码介绍。<br>
+具体可以参考下面 framework 初始化源码介绍。
 
 - 上下文传递
 
-  在整个调度允许过程中，后续的 plugin 可能需要使用到前面 plugin 产生的数据，那么 plugin 之间如何进行数据传递呢？<br>
+  在整个调度允许过程中，后续的 plugin 可能需要使用到前面 plugin 产生的数据，那么 plugin 之间如何进行数据传递呢？
 
   为此，scheduler 引入了 `CycleState` 对象，可以理解为整个 framework 的数据总线，各个 plugin 都可以读/写这个总线，我们看看这个对象的定义：
 

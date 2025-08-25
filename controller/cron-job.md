@@ -3,7 +3,8 @@ cron-job 实现了定时任务。cron-job 对象控制的对象是 job。<br>
 # 定时如何实现
 
 本质是在 cron-job 的 controller 里面有一个延时队列，通过 heap 保存，有一个定时任务定时从这个 heap 获取到期的 cron-job 对象，扔到
-controller 对应的 queue 中，然后有几个 consumer goroutine 负责从这个 queue 中获取 cron-job 并执行。<br>
+controller 对应的 queue 中，然后有几个 consumer goroutine 负责从这个 queue 中获取 cron-job 并执行，当 sync 完 cronjob 后，
+会重新计算下次调度时间，并重新将 cronjob 加入到队列中。
 
 延迟任务相关的代码如下：
 

@@ -1,29 +1,29 @@
-描述 k8s 中 replica_set 相关内容。<br>
+描述 k8s 中 replica_set 相关内容。
 
-replica_set 能够保证集群中有指定数量的 pod 运行。我们大概看看其实现原理。<br>
+replica_set 能够保证集群中有指定数量的 pod 运行。我们大概看看其实现原理。
 
 首先，replica_set listen 了两个 informer: pod_informer、replica_set_informer。当集群中 pod 和 replica_set 对象变更
-的时候，replica_set 会将对应的 replica_set 对象扔到一个 queue 中。<br>
+的时候，replica_set 会将对应的 replica_set 对象扔到一个 queue 中。
 
 replica_set 在启动的时候，会拉起若干个异步 goroutine，每个 goroutine 负责从 queue 获取 replica_set 然后进行 control 操作。
 大体逻辑如下：
-- 获取当前集群中所有与 replica_set 匹配的处于 active 中的 pod
+- 获取当前集群中所有与 replica_set 匹配的处于 active 中的 pod(直接从 pod store 中根据 namespace index 查)
 - 基于这些 pod 以及 replica_set 期望的 pod 数量，来计算需要创建/删除多少 pod
 - 根据匹配到的 active 的 pod 计算 replica_set 的 status 并更新
 
 这里有个问题，假设 replica_set 期望 3 个 pod，集群中一个 pod 都没有，那么经过一轮计算后，replica_set 就会创建 3 个 pod。但是，这里
-创建 pod 仅仅指的是在 etcd 中创建了 pod 对象，并不代表 pod 已经成功运行在某个 node 上了。<br>
+创建 pod 仅仅指的是在 etcd 中创建了 pod 对象，并不代表 pod 已经成功运行在某个 node 上了。
 
 如果在 informer 收到 pod 创建成功事件前，我们又从 queue 中获取到该 replica_set 对象(比如：informer 的 sync 操作将 replica_set 对象回灌到 queue)，这一轮
-计算过程中，集群中还是没有一个 active(创建成功即使还没真正运行也算 active) 的 pod，那岂不是又会创建 3 个 pod。<br>
+计算过程中，集群中还是没有一个 active(创建成功即使还没真正运行也算 active) 的 pod，那岂不是又会创建 3 个 pod。
 
-那么 k8s 如何解决此问题的呢？<br>
+那么 k8s 如何解决此问题的呢？
 
 这就是 `Expectations` 要解决的问题，比如要创建 3 个 pod，那 Expectations.Add = 3。当 replica_set listen 到对应的 pod 的创建成功事件时，就会将 Expectations.Add - 1
-，直到 Expectations.Add == 0，即表示上一轮期望的目标已经完成。这样在下一轮处理的时候，才会重新判断是否创建/删除 pod。<br>
+，直到 Expectations.Add == 0，即表示上一轮期望的目标已经完成。这样在下一轮处理的时候，才会重新判断是否创建/删除 pod。
 
 当然，有可能我们期望的 pod 创建事件可能很久都收不到，怎么办？ 给 Expectations 设置个过期时间就可以了。当 Expectations 过期的时候，也会重新判断创建/删除 pod，也即新建 Expectation。
-那如果在新创建了 pod 后，原来的 pod 创建事件收到了，那岂不是集群中的 pod 数量多了？那没关系，下次同步的过程中，会把多余的 pod 删除掉。<br>
+那如果在新创建了 pod 后，原来的 pod 创建事件收到了，那岂不是集群中的 pod 数量多了？那没关系，下次同步的过程中，会把多余的 pod 删除掉。
 
 我们看看 replicaSet 的 sync 流程：
 ```go

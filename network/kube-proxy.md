@@ -4,39 +4,39 @@
 
 # kube-proxy
 
-proxy 的意思就是 service 代理后端 pod。k8s 集群每台主机都会运行 kube-proxy，通过 iptables/ipvs 等方式，实现通过 service 即可访问<br>
+proxy 的意思就是 service 代理后端 pod。k8s 集群每台主机都会运行 kube-proxy，通过 iptables/ipvs 等方式，实现通过 service 即可访问
 实际 pods.
 
 ## endpoint/endpointSlice 对象
 
-kube-proxy 会监听系统中 service、endpointSlice 对象的变更，然后创建对应的 iptables/ipvs 规则。那么这里的 endpointSlice 对象的含义<br>
-是什么呢？又是什么时候创建的呢？跟 endpoint 的区别又是什么呢？<br>'
+kube-proxy 会监听系统中 service、endpointSlice 对象的变更，然后创建对应的 iptables/ipvs 规则。那么这里的 endpointSlice 对象的含义
+是什么呢？又是什么时候创建的呢？跟 endpoint 的区别又是什么呢？
 
 ### endpoint
 
-endpoint 对象跟 service 一一对应。endpoint 对象是由 endpoint controller 创建的。当 endpoint controller 监听到 service 以及 service<br>
-关联的 pod 对象变更的时候，就会创建/更新 对应的 endpoint 对象。<br>
+endpoint 对象跟 service 一一对应。endpoint 对象是由 endpoint controller 创建的。当 endpoint controller 监听到 service 以及 service
+关联的 pod 对象变更的时候，就会创建/更新 对应的 endpoint 对象。
 
 endpoint 对象包括 service 代理的所有 pod 的 ip+port 信息。
 
 ### endpointSlice
 
-endpoint 的问题是，因为 endpoint 包括了 service 代理的所有 pod 信息，因此如果 kube-proxy 监听 endpoint 对象，只要任意一个 pod 的 ip 发生变化，<br>
-比如重启、添加/删除 pod，就需要将 endpoint 对象发送给 k8s 集群中的每个实例。当 service 代理的 pod 很多的时候，endpoint 对象是很大的，这会<br>
-消耗大量的带宽。<br>
+endpoint 的问题是，因为 endpoint 包括了 service 代理的所有 pod 信息，因此如果 kube-proxy 监听 endpoint 对象，只要任意一个 pod 的 ip 发生变化，
+比如重启、添加/删除 pod，就需要将 endpoint 对象发送给 k8s 集群中的每个实例。当 service 代理的 pod 很多的时候，endpoint 对象是很大的，这会
+消耗大量的带宽。
 
-endpointSlice 对象的提出就是为了解决 endpoint 过大的问题。其思路是将一个大的 endpoint 拆分为 若干个小的 endpointSlice 对象。kube-proxy<br>
-只需要监听 endpointSlice 对象即可。这样当某个 pod 变化的时候，只会影响某几个 endpointSlice 对象，大大减少了网络带宽的小号。<br>
+endpointSlice 对象的提出就是为了解决 endpoint 过大的问题。其思路是将一个大的 endpoint 拆分为 若干个小的 endpointSlice 对象。kube-proxy
+只需要监听 endpointSlice 对象即可。这样当某个 pod 变化的时候，只会影响某几个 endpointSlice 对象，大大减少了网络带宽的消耗。
 
-同样 endpointSlice 对象的创建也是由 k8s endpointSliceMirror controller 负责的。该 controller 会监听 endpoint 对象，然后创建/更新对应的<br>
+同样 endpointSlice 对象的创建也是由 k8s endpointSliceMirror controller 负责的。该 controller 会监听 endpoint 对象，然后创建/更新对应的
 endpointSlice 对象。
 
 ## iptables
 
-kube-proxy 通过监听 service、endpointSlice 对象的变更，然后创建对应的 iptables chain/rule，然后通过 iptables-restore 的方式将<br>
-iptables 规则应用到宿主机中。<br>
+kube-proxy 通过监听 service、endpointSlice 对象的变更，然后创建对应的 iptables chain/rule，然后通过 iptables-restore 的方式将
+iptables 规则应用到宿主机中。
 
-接下来，我们重点看看 clusterIP、nodePort 两种类型的 service 的 iptables 实现。<br>
+接下来，我们重点看看 clusterIP、nodePort 两种类型的 service 的 iptables 实现。
 
 
 ### clusterIP
@@ -46,7 +46,7 @@ iptables 规则应用到宿主机中。<br>
 - 将标准的 chain 完全重定向到自定义 chain，在自定义 chain 中描述具体的 rule
 - 每一个 service 对应一个 chain，该 chain 下，每个 endpoint 对应一个 rule，而每个 rule 又 jump 到一个 endpoint 对应的 chain
 
-我们看看源码实现：<br>
+我们看看源码实现：
 
 首先是将标准的 chain 重定向到自定义 chain:
 
@@ -63,7 +63,7 @@ var iptablesJumpChains = []iptablesJumpChain{
 	{utiliptables.TableNAT, kubePostroutingChain, utiliptables.ChainPostrouting, "kubernetes postrouting rules", nil},
 }
 ```
-注意，不同的 table 可以创建同名的 chain，所以 filter 和 nat 中的 kubeServicesChain 是不同的 chain，这点要注意。<br>
+注意，不同的 table 可以创建同名的 chain，所以 filter 和 nat 中的 kubeServicesChain 是不同的 chain，这点要注意。
 
 接着我们看看自定义 chain 的具体规则：
 ```go
@@ -361,13 +361,13 @@ nodeIPs, err := proxier.nodePortAddresses.GetNodeIPs(proxier.networkInterfacer)
 
 - 同样，nodePort 的 postRouteingChain 也需要加 masquerade 实现 snat
 
-这里有一点，需要注意的是，为什么在 postRouteingChain 中要实现 snat?<br>
+这里有一点，需要注意的是，为什么在 postRouteingChain 中要实现 snat?
 
-假设调用路径如下：client -> node1 -> node2。node2 是后端 pod 所在的节点。如果没有实现 snat，从 node1 -> node2 的请求的源地址还是<br>
-client 的 ip 地址，当 node2 发送响应的时候，响应的目的 ip 地址就是 client，这样 node2 就直接把响应发送给 client。可是 client 不一定有<br>
-与 node2 对应的套接字，大概率会报错。<br>
+假设调用路径如下：client -> node1 -> node2。node2 是后端 pod 所在的节点。如果没有实现 snat，从 node1 -> node2 的请求的源地址还是
+client 的 ip 地址，当 node2 发送响应的时候，响应的目的 ip 地址就是 client，这样 node2 就直接把响应发送给 client。可是 client 不一定有
+与 node2 对应的套接字，大概率会报错。
 
-而有了 snat，node1 发送请求给 node2 的时候，就会把请求的源地址改成网卡的 ip 地址，这样 node2 发送响应也是发送到 node1，然后 node1 会根据<br>
+而有了 snat，node1 发送请求给 node2 的时候，就会把请求的源地址改成网卡的 ip 地址，这样 node2 发送响应也是发送到 node1，然后 node1 会根据
 snat 表，将目的地址转化为 client 的 ip，然后再通过路由将响应发送给 client.
 
 ## ipvs
@@ -380,11 +380,10 @@ ipvs 模式与 iptables 模式类似，也是监听 service、endpointSlice 对�
 - 对于每一个 endpoint + port，创建一个 real server 添加到内核中。
 - 在 ipvs 模式下，仍然需要通过 iptables 完成 snat 的功能。
 
-
 我们常说 ipvs 比 iptabls 性能好，为什么。目前能知道的是 ipvs 中维护后端 ips 的数据结构是 hash table，相比于 iptables 的 O(n) 时间复杂度，
 ipvs 查找后端 ip 的复杂度只有 O(1)。其他原因待后续补充。
 
 ### netlink socket
 
-一种与操作系统内核进行通信的方式。k8s 并没有使用 ipvsadm 来设置相关 ipvs 规则，而是直接通过 netlink socket 来构建各种规则。<br>
+一种与操作系统内核进行通信的方式。k8s 并没有使用 ipvsadm 来设置相关 ipvs 规则，而是直接通过 netlink socket 来构建各种规则。
 有空可以研究下对应的开源库。

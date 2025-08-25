@@ -1,19 +1,19 @@
-本文我们来介绍下，k8s 中，pod 之间、pod 与 宿主机之间的网络是如何互通的。<br>
+本文我们来介绍下，k8s 中，pod 之间、pod 与 宿主机之间的网络是如何互通的。
 
 # 容器到容器所在的宿主机
 
-当我们使用 docker 创建容器后，通常容器会有自己的 network namespace。那么容器与宿主机之间如何通信呢？<br>
+当我们使用 docker 创建容器后，通常容器会有自己的 network namespace。那么容器与宿主机之间如何通信呢？
 
-**通过 veth pair**, veth pair 即一对虚拟的网络接口，当我们在一个接口发送数据后，数据会立即出现在另一个接口，仿佛两个接口之间通过网线连接一样。<br>
-veth pair 常用来在不同的 network namespace 之间通信。<br>
+**通过 veth pair**, veth pair 即一对虚拟的网络接口，当我们在一个接口发送数据后，数据会立即出现在另一个接口，仿佛两个接口之间通过网线连接一样。
+veth pair 常用来在不同的 network namespace 之间通信。
 
-当我们使用 docker 创建一个容器的时候，实际上就会创建一个 veth pair，其中一个接口对应容器的 eth0，另一个接口在宿主机的 network namespace 中<br>
-并被绑定到网桥设备 docker0 上。当被绑定到网桥上之后，宿主机这一段接口就没有任何数据处理能力包括数据路由，而是全部交由 docker0 这个网桥负责。<br>
+当我们使用 docker 创建一个容器的时候，实际上就会创建一个 veth pair，其中一个接口对应容器的 eth0，另一个接口在宿主机的 network namespace 中
+并被绑定到网桥设备 docker0 上。当被绑定到网桥上之后，宿主机这一段接口就没有任何数据处理能力包括数据路由，而是全部交由 docker0 这个网桥负责。
 
-可是我们为什么要有个网桥呢？想象一下，每创建一个容器，便创建一个 veth pair，现在容器与宿主机之间可以通信了，但是容器之间如何通信呢？难道每两个<br>
-容器之间也需要创建一个 veth pair 吗？<br>
+可是我们为什么要有个网桥呢？想象一下，每创建一个容器，便创建一个 veth pair，现在容器与宿主机之间可以通信了，但是容器之间如何通信呢？难道每两个
+容器之间也需要创建一个 veth pair 吗？
 
-这就是网桥存在的意义，**作用类似于交换机，在一台宿主机上所有的容器都在同一个网段，网桥可以转发这个网段内的消息，进而实现了容器之间的网络互通**，同时网桥扮演容器网段的网关。<br>
+这就是网桥存在的意义，**作用类似于交换机，在一台宿主机上所有的容器都在同一个网段，网桥可以转发这个网段内的消息，进而实现了容器之间的网络互通**，同时网桥扮演容器网段的网关。
 
 ## 同一宿主机不同容器通信
 
@@ -33,7 +33,7 @@ veth pair 常用来在不同的 network namespace 之间通信。<br>
 - docker0 ethHost1 端口接收到数据
 - 发现数据包的目标 ip 地址在容器网段中，根据学习到的 arp 信息，通过 ethHost2 端口把数据发送出去
 - container2 的 eth0 会收到此信息，随后沿着 container2 network namespace 的协议栈把数据包传到应用进程
-- container2 恢复响应的流程相反，不再赘述
+- container2 回复响应的流程相反，不再赘述
 
 以上便实现了同一宿主机不同容器之间的网络互通。
 
@@ -45,18 +45,18 @@ veth pair 常用来在不同的 network namespace 之间通信。<br>
 - container1 通过 eth0 发送消息
 - docker0 ethHost1 端口接收到消息，docker0 发现目标地址不在容器网段，因此交由宿主机的路由表决定下一步去向。
 - 因为目的地址是宿主机地址，因此该数据包交由宿主机的协议栈处理。
-- 宿主机发送响应，同样查询路由表，在宿主机的路由表上会多一条记录，凡是与容器网段匹配的地址，都从 docker0 发出，同时是一个直连网络，即 gateway 字段<br>
+- 宿主机发送响应，同样查询路由表，在宿主机的路由表上会多一条记录，凡是与容器网段匹配的地址，都从 docker0 发出，同时是一个直连网络，即 gateway 字段
 为 0.0.0.0，则 docker0 需要直接获取数据包目标 ip 对应的 mac 地址，这里就是 container1 eth0 对应的 mac 地址，然后拼装成一个以太网帧，然后通过 ethHost1 发送出去。
 - container1 的 eth0 接收到消息，然后由协议栈处理
 
-以上便完成了容器与宿主机之间的网络通信。<br>
+以上便完成了容器与宿主机之间的网络通信。
 
 但是，容器如何与其他的宿主机通信，不同宿主机上的容器之间又如何通信，**这是 docker 没有解决的问题。**
 
 # 跨主容器通信
 
-有不同的实现方式，核心思路是通过隧道的方式封装原始数据包(两层或者三层数据包)，利用宿主机之间的网络将数据包发送到目标宿主机，然后宿主机上解包，发送给对应的容器,<br>
-这其实就是 `overlay` 的思路。<br>
+有不同的实现方式，核心思路是通过隧道的方式封装原始数据包(两层或者三层数据包)，利用宿主机之间的网络将数据包发送到目标宿主机，然后宿主机上解包，发送给对应的容器,
+这其实就是 `overlay` 的思路。
 
 我们这里以 flannel 举例，介绍下两种实现方式：vxlan 和 udp。
 
@@ -91,18 +91,18 @@ veth pair 常用来在不同的 network namespace 之间通信。<br>
 ]
 ```
 
-  每个节点上都会运行一个 flannel 进程，在 k8s 中，其是通过 daemonset 的方式部署的。flannel 会创建一个 vtep(virtual tunnel endpoint) 设备，<br>
-该设备工作在链路层，有 mac 地址。<br>
+  每个节点上都会运行一个 flannel 进程，在 k8s 中，其是通过 daemonset 的方式部署的。flannel 会创建一个 vtep(virtual tunnel endpoint) 设备，
+该设备工作在链路层，有 mac 地址。
 
-  每个节点上都会在路由表中加入若干个条目，每个条目与每个运行 flannel 的节点对应。比如节点 node1 其容器网络为：10.244.1.0/24，<br>
-flannel 创建的 vtep 设备的 ip 为：10.244.1.0，设备名为：flannel.1。那么在 node2 上就会多这么一条 ip route:<br>
+  每个节点上都会在路由表中加入若干个条目，每个条目与每个运行 flannel 的节点对应。比如节点 node1 其容器网络为：10.244.1.0/24，
+flannel 创建的 vtep 设备的 ip 为：10.244.1.0，设备名为：flannel.1。那么在 node2 上就会多这么一条 ip route:
 
 ```shell
 Destination Gateway Genmask Flags Metric Ref Use Iface
 10.244.1.0 10.244.1.0 255.255.255.0 UG 0 0 0 flannel.1
 ```
 
-  接入现在要发送一条从 node2.container2 发往 node1.container1 的数据。路径如下：
+  假如现在要发送一条从 node2.container2 发往 node1.container1 的数据。路径如下：
 
   - node2.container2 把数据发送到对应的网桥 cni
   - cni 接收到判断不属于当前容器网段，交给宿主机的路由表判断下一步去向
@@ -114,27 +114,27 @@ Destination Gateway Genmask Flags Metric Ref Use Iface
   - node1 上的 flannel.1 接受数据包，判断目标 mac 地址跟自己一致，然后交由路由表决定下一步去向
   - 因为目标 ip 地址是 node1.container1，所以根据路由表，此数据包交由 node1 网桥 cni 处理，同时这是个直连网络，因此 cni 直接获取 container1 的 mac 地址，然后组装成 ethernet frame 发送给 container1
 
-以上便实现了跨主机容器之间的通信。<br>
+以上便实现了跨主机容器之间的通信。
 
 我们可以看到 vxlan 的关键在于 flannel 进程能够监听集群中其他节点的相关信息并应用到当前节点中，从而保证能够将数据发送到正确的 node 上。
 
 ## udp
 
-udp 的实现方式与 vxlan 类似，不同点在于其创建的是 tun 设备，该设备**可以完成 ip 数据包在内核态和用户态之间的交互，用户态通过读取/写入文件的方式读取/写入 tun 的 ip 数据包**。<br>
+udp 的实现方式与 vxlan 类似，不同点在于其创建的是 tun 设备，该设备**可以完成 ip 数据包在内核态和用户态之间的交互，用户态通过读取/写入文件的方式读取/写入 tun 的 ip 数据包**。
 
-因为涉及到用户态与内核态之间的数据拷贝，性能较差，这种方式已经过失了。
+因为涉及到用户态与内核态之间的数据拷贝，性能较差，这种方式已经过时了。
 
 # CNI
 
 如果要实现一个 k8s 的网络方案，其包括两部分内容：
 
-- 通过 daemon pod 方式设置 k8s 集群每个节点上的网络，比如创建 vtep 设备，添加路由表等。
+- 通过 daemon pod 方式设置 k8s 集群每个节点上的网络，比如创建 vtep 设备，添加宿主机路由表等。
 - CRI 在创建 pod 的时候调用 CNI(Container Network Interface)，设置 pod 网络环境。比如：创建虚拟网卡，创建 veth pair 并绑定到 cni 网桥上。
 
-实际上，CNI 就是一系列的二进制，存放在特定目录下。那么 CRI 怎么知道要调用哪个 CNI 呢？实际上 CRI 会在特定目录 `/etc/cni/net.d/`下查找配置文件，<br>
-每个网络项目都会在此目录下创建一个配置文件，描述配置 pod 网络环境的详细流程，如果存在多个文件，则 CRI 会按字母序排序取第一个文件。<br>
+实际上，CNI 就是一系列的二进制，存放在特定目录下。那么 CRI 怎么知道要调用哪个 CNI 呢？实际上 CRI 会在特定目录 `/etc/cni/net.d/`下查找配置文件，
+每个网络项目都会在此目录下创建一个配置文件，描述配置 pod 网络环境的详细流程，如果存在多个文件，则 CRI 会按字母序排序取第一个文件。
 
-该配置文件的 plugin 中可以指定多个 CNI Binary，CRI 就会按需调用多个 CNI，完成对 pod 网络环境的设置。我们还是以 flannel 项目举例，其对应的 yaml 配置如下：<br>
+该配置文件的 plugin 中可以指定多个 CNI Binary，CRI 就会按需调用多个 CNI，完成对 pod 网络环境的设置。我们还是以 flannel 项目举例，其对应的 yaml 配置如下：
 
 ```yaml
 # 对应的配置文件，在启动 flanneld 的时候，会将此配置文件拷贝到 /etc/cni/net.d 目录下
@@ -255,7 +255,7 @@ spec:
         command:
         - cp
         image: docker.io/flannel/flannel-cni-plugin:v1.5.1-flannel2
-        # 将 flannel 安装到 /opt/cni/bin 中
+        # 将 flannel 安装到 /opt/cni/bin 中，后面 cri 就会调用该二进制完成容器网络环境的配置
         name: install-cni-plugin
         volumeMounts:
         - mountPath: /opt/cni/bin
@@ -304,8 +304,8 @@ spec:
 
 [flannel](https://github.com/flannel-io/flannel) 是一个典型的 CNI 实现，我们看看其源码实现。
 
-flannel pod 启动后，会创建 vtep 虚拟设备，并将自己的所在节点的 ip、vtep mac 地址等信息写入到 node 对象的 annotations 中。同时会通过 node informer<br>
-监控 k8s 集群中 node 对象的信息，然后从 annotations 中获取对应的信息，然后 apply 到当前节点，包括创建 route、更新 fdb(forward database) 等。<br>
+flannel pod 启动后，会创建 vtep 虚拟设备，并将自己的所在节点的 ip、vtep mac 地址等信息写入到 node 对象的 annotations 中。同时会通过 node informer
+监控 k8s 集群中 node 对象的信息，然后从 annotations 中获取对应的信息，然后 apply 到当前节点，包括创建 route、更新 fdb(forward database) 等。
 
 我们看看 flannel 监控集群 node 信息并更新路由、fdb 等信息的代码实现：
 ```go
@@ -380,3 +380,69 @@ func (nw *network) handleSubnetEvents(batch []lease.Event) {
 ```
 
 同样，flannel 与 内核交互的方式都是通过 `netlink socket` 进行的。
+
+# multi tenancy(多租户)
+
+## 解决什么问题
+
+我们前面都在讨论如何连通两个容器，如果要对容器之间的网络进行隔离，应该如何实现呢？也就是所谓的 multi tenancy.
+
+## 怎么解决的
+
+核心还是通过 iptables 来实现，通过 iptables 我们可以将一些特定的流入数据包、流出数据包放心，其他直接 reject。
+那这些 iptables 又根据什么而来呢？
+
+核心思路还是遵守 k8s 的编程范式，通过 自定义 api 对象 + 控制器的方式来进行 iptables 的生成。
+k8s 定义了 networkPolicy 对象，核心内容包括：对哪些 pod 的哪些入流量和出流量进行放行(白名单)，其他全部拒绝。
+
+```yaml
+apiVersion: extensions/v1beta1
+kind: NetworkPolicy
+metadata:
+  name: test-network-policy
+  namespace: default
+spec:
+  podSelector:
+    matchLabels:
+      role: db # 该规则生效的 pod 范围
+  ingress: # 访问上述 pod 的入流量的白名单
+    - from: # 指定的 namespace 或者 指定的 pod 才可以访问，当然也可以是与的关系，需要写入到 yaml 列表的一个元素中
+        - namespaceSelector:
+            matchLabels:
+              project: myproject
+        - podSelector:
+            matchLabels:
+              role: frontend
+      ports: # 只允许访问该端口
+        - protocol: tcp
+          port: 6379
+  egress:  # 出流量白名单配置(pod 只能访问下面指定的地址+端口)
+    - to:    
+      - ipBlock:        
+        cidr: 10.0.0.0/24    
+      ports:
+        - protocol: TCP
+          port: 5978
+```
+
+iptables 的生效还是依赖于 daemon 形式的 CNI，不过并不是所有的网络插件都支持。以 ingress 举例，我们看看 iptables 生成流程：
+
+- 首先，插件通过 informer 机制，遍历 networkPolicy 圈定的 pod 以及符合 ingress 白名单的 pod，生成放行规则。这些规则放到 `KUBE-NWPLCY-CHAIN` 中。
+```shell
+    iptables -A KUBE-NWPLCY-CHAIN -s $srcIP -d $dstIP -p $protocol -m $protocol --dport $port -j ACCEPT 
+```
+
+- 上述自定义 chain 怎么生效呢？需要从标准的 chain 跳过来
+
+我们知道发送到 pod 的流量，都是要过 forward chain 的，所以我们可以在 filter forward chain(chain未特殊说明，所在的 table 都是 filter) 中加入 rule，进行跳转。
+网络插件，对当前节点上在 networkPolicy 圈定 pod 范围中的 pod，生成下面规则。
+
+```shell
+    iptables -A FORWARD -d $podIP -j KUBE-POD-SPECIFIC-FW-CHAIN
+```
+
+KUBE-POD-SPECIFIC-FW-CHAIN 的规则如下：
+```shell
+iptables -A KUBE-POD-SPECIFIC-FW-CHAIN -j KUBE-NWPLCY-CHAIN # 先跳转到 NWPLCY 匹配
+iptables -A KUBE-POD-SPECIFIC-FW-CHAIN -j REJECT --reject-with icmp-port-unreachable # 如果没有匹配，则直接拒绝
+```
